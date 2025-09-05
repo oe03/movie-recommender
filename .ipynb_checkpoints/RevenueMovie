@@ -1,0 +1,136 @@
+import pandas as pd
+import os
+
+def clear_screen():
+    if os.name == "nt":
+        os.system("cls")
+    else:
+        os.system("clear")
+
+def movie_recommender(file_path="RevenueMovies.csv"):
+    try:
+        df = pd.read_csv(file_path)
+    except FileNotFoundError:
+        print(f"❌ Could not find {file_path}. Please put it in the same folder as this script.")
+        return
+    
+    if "title" not in df.columns or "revenue" not in df.columns:
+        print("❌ Dataset does not contain 'title' or 'revenue' columns.")
+        return
+
+    df = df[['title', 'revenue']].dropna()
+    df = df[df['revenue'] > 0].reset_index(drop=True)
+
+    feedback_log = []
+    locked_range = None   # store (lower_bound, upper_bound) after first choice
+
+    while True:
+        clear_screen()
+
+        # If revenue range is locked, filter dataset
+        if locked_range:
+            lower_bound, upper_bound = locked_range
+            filtered_df = df[(df['revenue'] >= lower_bound) & (df['revenue'] <= upper_bound)]
+        else:
+            filtered_df = df
+
+        if filtered_df.empty:
+            print("⚠️ No movies available in this revenue range.")
+            break
+
+        movie_sample = filtered_df.sample(min(20, len(filtered_df))).reset_index(drop=True)
+
+        print("🎥 Available movies:")
+        for i, row in movie_sample.iterrows():
+            print(f"{i+1}. {row['title']} (Revenue: ${row['revenue']:,})")
+        
+        user_input = input(
+            "\nEnter the number of the movie you watched "
+            "(or 'f' to refresh list, 'q' to quit): "
+        ).strip().lower()
+        
+        if user_input == "q":
+            print("👋 Exiting the recommender. Goodbye!")
+            break
+        elif user_input == "f":
+            continue
+
+        if not user_input.isdigit():
+            print("❌ Invalid input. Please enter a number, 'f' to refresh, or 'q' to quit.")
+            input("\nPress Enter to continue...")
+            continue
+
+        choice = int(user_input) - 1
+        if choice < 0 or choice >= len(movie_sample):
+            print("❌ Invalid choice number.")
+            input("\nPress Enter to continue...")
+            continue
+
+        selected_movie = movie_sample.iloc[choice]
+        selected_title = selected_movie['title']
+        selected_revenue = selected_movie['revenue']
+
+        # Lock revenue range if not already set
+        if not locked_range:
+            lower_bound = selected_revenue * 0.7
+            upper_bound = selected_revenue * 1.3
+            locked_range = (lower_bound, upper_bound)
+
+        # Recommendation pool (same range, excluding selected movie)
+        recommendations_pool = filtered_df[filtered_df['title'] != selected_title]
+
+        while True:
+            clear_screen()
+            print(f"\n🎬 Since you watched **{selected_title}**, you might also like:\n")
+
+            if recommendations_pool.empty:
+                print("⚠️ Sorry, no recommendations found in this revenue range.")
+                break
+
+            recs = recommendations_pool.sample(min(5, len(recommendations_pool))).reset_index(drop=True)
+            for i, row in recs.iterrows():
+                print(f"{i+1}. {row['title']} (Revenue: ${row['revenue']:,})")
+
+            feedback = input(
+                "\n👉 Which of these recommendations did you like? "
+                "(Enter numbers like '1,3', 'x' to skip, 'f' to refresh): "
+            ).strip().lower()
+
+            if feedback == "f":
+                continue  # refresh recommendation list
+            liked = []
+            if feedback != "x" and feedback != "":
+                for num in feedback.split(","):
+                    if num.strip().isdigit():
+                        idx = int(num.strip()) - 1
+                        if 0 <= idx < len(recs):
+                            liked.append(recs.iloc[idx]['title'])
+
+            # Save feedback
+            feedback_log.append({
+                "watched": selected_title,
+                "recommendations": list(recs['title']),
+                "liked": liked
+            })
+            break  # exit recommendation section, return to movie list
+
+        input("\nPress Enter to return to the movie list...")
+
+    # Summary
+    clear_screen()
+    print("📊 User Satisfaction Summary:\n")
+    total_recs = sum(len(f["recommendations"]) for f in feedback_log)
+    total_likes = sum(len(f["liked"]) for f in feedback_log)
+
+    if total_recs > 0:
+        precision = total_likes / total_recs
+        print(f"Total recommendations shown: {total_recs}")
+        print(f"Total movies liked: {total_likes}")
+        print(f"Precision (Liked / Recommended): {precision:.2f}")
+    else:
+        print("No recommendations were evaluated.")
+
+    print("\nThanks for using the recommender! 🙌")
+
+if __name__ == "__main__":
+    movie_recommender("RevenueMovies.csv")
