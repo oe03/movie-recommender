@@ -226,8 +226,6 @@ if not st.session_state["recommendations"].empty:
         with st.expander("What does this mean?"):
             st.write(
                 "Precision = Liked ÷ (Liked + Not interested). "
-                "It uses only the movies you evaluated, so clicking 'Not interested' will decrease precision, "
-                "and clicking 'Like' will increase it."
             )
     else:
         st.info("Mark some recommendations as Like or Not interested to see precision.")
